@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Protótipo – Análise de Folha de Pagamento com Regressão, Validação, PDF e Navegação</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    /* Menu de Navegação */
+    #navbar {
+      background-color: #2c3e50;
+      padding: 10px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      z-index: 1001;
+    }
+    #navbar a {
+      color: #ecf0f1;
+      margin-right: 15px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    #navbar a:hover {
+      text-decoration: underline;
+    }
+    /* Espaço para não sobrepor o conteúdo pelo navbar fixo */
+    #content {
+      margin-top: 60px;
+    }
+    h1, h2 {
+      color: #2c3e50;
+    }
+    button {
+      background-color: #3498db;
+      color: #fff;
+      padding: 8px 15px;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    select, input {
+      padding: 5px;
+      margin: 5px 0;
+    }
+    #output {
+      margin-top: 20px;
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #fdfdfd;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    table th, table td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    /* Classe para linha selecionada */
+    .selected {
+      background-color: #f9e79f !important;
+    }
+    .charts-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 30px;
+    }
+    .chart-wrapper {
+      max-width: 500px;
+      flex: 1;
+    }
+    #analysisSummary, #regressionResults, #rhIndicators, #validationAlert {
+      margin-top: 30px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    #benfordMethodology {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #555;
+      border-top: 1px dashed #ccc;
+      padding-top: 10px;
+    }
+    #inconsistencyList {
+      margin-top: 30px;
+    }
+    #divergenciasContainer {
+      margin-top: 30px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    #toleranceContainer {
+      margin-bottom: 10px;
+    }
+    /* Loader simples */
+    #loader {
+      display: none;
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      background: rgba(255,255,255,0.9);
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  <!-- Menu de Navegação -->
+  <div id="navbar">
+    <a href="#tabelaResultados">Resultados</a>
+    <a href="#casosListados">Casos Listados</a>
+    <a href="#analysisSummary">Resumo</a>
+    <a href="#rhIndicators">Indicadores de RH</a>
+    <a href="#divergenciasContainer">Divergências</a>
+    <a href="#regressionResults">Regressão</a>
+  </div>
+
+  <div id="content">
+    <h1>Protótipo – Análise de Folha de Pagamento com Regressão, Validação, PDF e Navegação</h1>
+
+    <!-- Loader -->
+    <div id="loader">Carregando...</div>
+
+    <!-- Upload do arquivo (CSV, XLSX ou XLS) -->
+    <input type="file" id="excelFile" accept=".csv, .xlsx, .xls" />
+    <button id="loadFileBtn">Carregar Planilha</button>
+    <br><br>
+
+    <!-- Menu de Comandos -->
+    <label for="commandMenu"><strong>Selecione o comando:</strong></label>
+    <select id="commandMenu">
+      <option value="">-- Selecione --</option>
+      <option value="1">1 - Filtrar SALARIO acima de um valor</option>
+      <option value="2">2 - Filtrar SALARIO abaixo de um valor</option>
+      <option value="3">3 - Filtrar DESCONTOS acima de um valor</option>
+      <option value="4">4 - Filtrar DESCONTOS abaixo de um valor</option>
+      <option value="5">5 - Filtrar por CENTRO_CUSTO</option>
+      <option value="6">6 - Aplicar análise de Benford na coluna SALARIO</option>
+      <option value="7">7 - Filtrar LIQUIDO acima de um valor</option>
+      <option value="8">8 - Filtrar LIQUIDO abaixo de um valor</option>
+      <option value="9">9 - Analisar divergências SALARIO, DESCONTOS e LIQUIDO</option>
+      <option value="10">10 - Aplicar Regressão Linear e Exponencial</option>
+    </select>
+
+    <!-- Parâmetros do comando -->
+    <div id="parameters"></div>
+
+    <!-- Botão para executar o comando -->
+    <button id="executeBtn">Executar Comando</button>
+    <button id="exportPDFBtn">Exportar Relatório PDF</button>
+
+    <!-- Área de saída -->
+    <div id="output"></div>
+
+    <!-- Alerta de validação de dados -->
+    <div id="validationAlert"></div>
+
+    <!-- Tabela para exibir resultados filtrados -->
+    <div id="tabelaResultados">
+      <h2>Resultados</h2>
+      <table id="resultsTable"></table>
+    </div>
+
+    <!-- Área de gráficos -->
+    <div class="charts-container">
+      <div class="chart-wrapper">
+        <h2>Distribuição (Benford)</h2>
+        <canvas id="benfordChart"></canvas>
+        <div id="benfordMethodology">
+          <strong>Metodologia de Análise:</strong><br>
+          A análise de Benford compara a frequência do primeiro dígito dos valores com a distribuição esperada, onde a probabilidade do dígito d ser o primeiro é dada por:<br>
+          p(d) = log10(1 + 1/d), para d = 1 a 9.
+        </div>
+      </div>
+      <div class="chart-wrapper">
+        <h2>Desvio da Distribuição de Benford</h2>
+        <canvas id="benfordDeviationChart"></canvas>
+      </div>
+      <div class="chart-wrapper">
+        <h2>Gráfico de Análise Filtrada</h2>
+        <canvas id="analysisChart"></canvas>
+      </div>
+      <div class="chart-wrapper">
+        <h2>Scatter - Regressão Linear</h2>
+        <canvas id="regressionScatterChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Tabela abaixo dos gráficos para mostrar os casos listados -->
+    <div id="casosListados">
+      <h2>Casos Listados</h2>
+      <table id="casesTable"></table>
+    </div>
+
+    <!-- Resumo da Análise Filtrada -->
+    <div id="analysisSummary">
+      <h2>Resumo da Análise Filtrada</h2>
+      <p id="summaryText">Nenhuma análise realizada.</p>
+    </div>
+
+    <!-- Indicadores de RH -->
+    <div id="rhIndicators">
+      <h2>Indicadores de RH</h2>
+      <p id="errorRate">Taxa de Erro na Folha: -</p>
+      <p id="avgDifference">Diferença Média entre Valor Estimado e Real: -</p>
+    </div>
+
+    <!-- Tabela de possíveis inconsistências por nome -->
+    <div id="inconsistencyList">
+      <h2>Possíveis Inconsistências por Nome</h2>
+      <table id="inconsistencyTable"></table>
+    </div>
+
+    <!-- Container para divergências com controle deslizante -->
+    <div id="divergenciasContainer">
+      <h2>Divergências entre Salário, Descontos e Líquido</h2>
+      <div id="toleranceContainer">
+        <label for="toleranceSlider">Tolerância (R$): <span id="toleranceValue">0,01</span></label><br>
+        <input type="range" id="toleranceSlider" min="0" max="100" step="0.01" value="0.01">
+      </div>
+      <table id="divergenciaTable"></table>
+    </div>
+
+    <!-- Área para exibir resultados da regressão -->
+    <div id="regressionResults">
+      <h2>Resultados da Regressão</h2>
+      <div id="regressionOutput">Nenhuma regressão realizada.</div>
+    </div>
+  </div>
+
+  <!-- Dependências: SheetJS, Chart.js, jsPDF e html2canvas -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <script>
+    // Função para formatação de números no padrão Brasil
+    function formatNumber(num) {
+      return parseFloat(num).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Função para converter string no formato brasileiro para número
+    function parseNumber(val) {
+      if(typeof val === "string") {
+        // Remove os separadores de milhar (ponto) e substitui a vírgula decimal por ponto
+        return parseFloat(val.replace(/\./g, '').replace(',', '.'));
+      }
+      return val;
+    }
+
+    // Variáveis globais
+    let workbook;
+    let sheetData = [];
+    let currentFilteredRows = null;
+    let benfordChartInstance = null;
+    let benfordDeviationChartInstance = null;
+    let analysisChartInstance = null;
+    let regressionScatterChartInstance = null;
+    let validationIssues = []; // Armazena linhas com dados inválidos
+
+    // Função para mostrar o loader
+    function showLoader() {
+      document.getElementById('loader').style.display = "block";
+    }
+    // Função para esconder o loader
+    function hideLoader() {
+      document.getElementById('loader').style.display = "none";
+    }
+
+    // Carregar e ler o arquivo
+    document.getElementById('loadFileBtn').addEventListener('click', () => {
+      const fileInput = document.getElementById('excelFile');
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Selecione um arquivo primeiro!");
+        return;
+      }
+      
+      showLoader();
+      const fileExt = file.name.split('.').pop().toLowerCase();
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        let data;
+        if(fileExt === 'csv') {
+          data = e.target.result;
+          // Para CSV, considerando separador decimal "," e separador de campo ";"
+          workbook = XLSX.read(data, { type: 'string', FS: ';' });
+        } else {
+          data = new Uint8Array(e.target.result);
+          workbook = XLSX.read(data, { type: 'array' });
+        }
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        sheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        // Validação de Dados: verificar registros inválidos nas colunas SALARIO, DESCONTOS e LIQUIDO
+        validationIssues = [];
+        if(sheetData.length > 1) {
+          const headers = sheetData[0].map(h => String(h).toLowerCase());
+          const requiredCols = ["salario", "descontos", "liquido"];
+          requiredCols.forEach(col => {
+            if(!headers.includes(col)) {
+              validationIssues.push(`Coluna "${col}" não encontrada.`);
+            }
+          });
+          // Verifica cada registro
+          const idxSalario = headers.indexOf("salario");
+          const idxDescontos = headers.indexOf("descontos");
+          const idxLiquido = headers.indexOf("liquido");
+          for(let i = 1; i < sheetData.length; i++) {
+            const row = sheetData[i];
+            if(isNaN(parseNumber(row[idxSalario])) ||
+               isNaN(parseNumber(row[idxDescontos])) ||
+               isNaN(parseNumber(row[idxLiquido]))) {
+              validationIssues.push(`Linha ${i+1}: Valores inválidos.`);
+            }
+          }
+        }
+        // Exibir alertas de validação, se houver
+        const valAlert = document.getElementById('validationAlert');
+        if(validationIssues.length > 0) {
+          valAlert.innerHTML = "<strong>Atenção:</strong><br>" + validationIssues.join("<br>");
+          valAlert.style.color = "red";
+        } else {
+          valAlert.innerHTML = "Todos os dados foram validados com sucesso.";
+          valAlert.style.color = "green";
+        }
+        document.getElementById('output').innerText = "Planilha carregada com sucesso! Linhas: " + sheetData.length;
+        hideLoader();
+      };
+
+      if(fileExt === 'csv') {
+        reader.readAsText(file, "UTF-8");
+      } else {
+        reader.readAsArrayBuffer(file);
+      }
+    });
+
+    // Atualiza parâmetros conforme comando selecionado
+    document.getElementById('commandMenu').addEventListener('change', (e) => {
+      const op = e.target.value;
+      const paramsDiv = document.getElementById('parameters');
+      paramsDiv.innerHTML = "";
+      if(op === "1" || op === "2" || op === "3" || op === "4" || op === "7" || op === "8") {
+        let label = document.createElement('label');
+        if(op === "1") label.innerText = "Informe o valor para SALARIO (acima): ";
+        else if(op === "2") label.innerText = "Informe o valor para SALARIO (abaixo): ";
+        else if(op === "3") label.innerText = "Informe o valor para DESCONTOS (acima): ";
+        else if(op === "4") label.innerText = "Informe o valor para DESCONTOS (abaixo): ";
+        else if(op === "7") label.innerText = "Informe o valor para LIQUIDO (acima): ";
+        else if(op === "8") label.innerText = "Informe o valor para LIQUIDO (abaixo): ";
+        let input = document.createElement('input');
+        input.type = "number";
+        input.id = "paramValue";
+        paramsDiv.appendChild(label);
+        paramsDiv.appendChild(input);
+      } else if(op === "5") {
+        if(sheetData && sheetData.length > 1) {
+          let headers = sheetData[0];
+          let ccIndex = headers.map(h => String(h).toLowerCase()).indexOf("centro_custo");
+          let select = document.createElement('select');
+          select.id = "paramValue";
+          let defaultOption = document.createElement('option');
+          defaultOption.value = "";
+          defaultOption.textContent = "-- Selecione o Centro de Custo --";
+          select.appendChild(defaultOption);
+          if(ccIndex !== -1) {
+            let centros = [];
+            for(let i = 1; i < sheetData.length; i++){
+              let row = sheetData[i];
+              let centro = row[ccIndex];
+              if(centro && !centros.includes(centro)) centros.push(centro);
+            }
+            centros.sort();
+            centros.forEach(centro => {
+              let option = document.createElement('option');
+              option.value = centro;
+              option.textContent = centro;
+              select.appendChild(option);
+            });
+          } else {
+            select = null;
+          }
+          if(select) {
+            let label = document.createElement('label');
+            label.innerText = "Selecione o Centro de Custo: ";
+            paramsDiv.appendChild(label);
+            paramsDiv.appendChild(select);
+          } else {
+            let label = document.createElement('label');
+            label.innerText = "Informe o Centro de Custo: ";
+            let input = document.createElement('input');
+            input.type = "text";
+            input.id = "paramValue";
+            paramsDiv.appendChild(label);
+            paramsDiv.appendChild(input);
+          }
+        } else {
+          let label = document.createElement('label');
+          label.innerText = "Informe o Centro de Custo: ";
+          let input = document.createElement('input');
+          input.type = "text";
+          input.id = "paramValue";
+          paramsDiv.appendChild(label);
+          paramsDiv.appendChild(input);
+        }
+      }
+    });
+
+    // Executar comando selecionado
+    document.getElementById('executeBtn').addEventListener('click', () => {
+      const op = document.getElementById('commandMenu').value;
+      if (!op) { alert("Selecione um comando no menu."); return; }
+      let paramValue = document.getElementById('paramValue') ? document.getElementById('paramValue').value : null;
+      paramValue = paramValue ? paramValue.trim() : null;
+      
+      switch(op) {
+        case "1":
+          if (!paramValue) { alert("Informe o valor para filtrar SALARIO acima."); return; }
+          filtrarValores("SALARIO", "acima", parseNumber(paramValue), "numeric");
+          break;
+        case "2":
+          if (!paramValue) { alert("Informe o valor para filtrar SALARIO abaixo."); return; }
+          filtrarValores("SALARIO", "abaixo", parseNumber(paramValue), "numeric");
+          break;
+        case "3":
+          if (!paramValue) { alert("Informe o valor para filtrar DESCONTOS acima."); return; }
+          filtrarValores("DESCONTOS", "acima", parseNumber(paramValue), "numeric");
+          break;
+        case "4":
+          if (!paramValue) { alert("Informe o valor para filtrar DESCONTOS abaixo."); return; }
+          filtrarValores("DESCONTOS", "abaixo", parseNumber(paramValue), "numeric");
+          break;
+        case "5":
+          if (!paramValue) { alert("Selecione ou informe o nome do Centro de Custo."); return; }
+          filtrarPorCentroCusto(paramValue);
+          break;
+        case "6":
+          aplicarBenford("SALARIO");
+          break;
+        case "7":
+          if (!paramValue) { alert("Informe o valor para filtrar LIQUIDO acima."); return; }
+          filtrarValores("LIQUIDO", "acima", parseNumber(paramValue), "numeric");
+          break;
+        case "8":
+          if (!paramValue) { alert("Informe o valor para filtrar LIQUIDO abaixo."); return; }
+          filtrarValores("LIQUIDO", "abaixo", parseNumber(paramValue), "numeric");
+          break;
+        case "9":
+          analisarDivergencias();
+          break;
+        case "10":
+          aplicarRegressao();
+          break;
+        default:
+          alert("Comando não reconhecido.");
+      }
+    });
+
+    // Atualiza a tolerância e reexecuta análise de divergências
+    document.getElementById('toleranceSlider').addEventListener('input', (e) => {
+      const tolValue = e.target.value;
+      document.getElementById('toleranceValue').innerText = tolValue.replace('.', ',');
+      if(sheetData && sheetData.length > 1) {
+        analisarDivergencias();
+      }
+    });
+
+    /***********************************************************************
+     * Função de Filtro de Valores (SALARIO, DESCONTOS e LIQUIDO)
+     ***********************************************************************/
+    function filtrarValores(colName, direction, limit, type) {
+      if (!sheetData || sheetData.length === 0) {
+        document.getElementById('output').innerText += "\nNenhuma planilha carregada ou sem dados.";
+        return;
+      }
+      let headers = sheetData[0];
+      let colIndex = headers.map(h => String(h).toLowerCase()).indexOf(colName.toLowerCase());
+      if (colIndex === -1) {
+        document.getElementById('output').innerText += `\nColuna "${colName}" não encontrada na planilha.`;
+        return;
+      }
+      let filteredRows = [];
+      for (let i = 1; i < sheetData.length; i++) {
+        let row = sheetData[i];
+        let cellValue = parseNumber(row[colIndex]) || 0;
+        if (direction === "acima" && cellValue > limit) filteredRows.push(row);
+        else if (direction === "abaixo" && cellValue < limit) filteredRows.push(row);
+      }
+      currentFilteredRows = filteredRows;
+      exibirTabela(filteredRows, headers);
+      document.getElementById('output').innerText += `\nFiltro aplicado: ${colName} ${direction} de ${formatNumber(limit)}. Registros encontrados: ${filteredRows.length}.`;
+      updateAnalysisSummary(filteredRows, headers, colName, type);
+    }
+
+    /***********************************************************************
+     * Função para filtrar por CENTRO_CUSTO
+     ***********************************************************************/
+    function filtrarPorCentroCusto(centro) {
+      if (!sheetData || sheetData.length === 0) {
+        document.getElementById('output').innerText += "\nNenhuma planilha carregada ou sem dados.";
+        return;
+      }
+      let headers = sheetData[0];
+      let colIndex = headers.map(h => String(h).toLowerCase()).indexOf("centro_custo");
+      if (colIndex === -1) {
+        document.getElementById('output').innerText += `\nColuna "CENTRO_CUSTO" não encontrada na planilha.`;
+        return;
+      }
+      let filteredRows = [];
+      for (let i = 1; i < sheetData.length; i++) {
+        let row = sheetData[i];
+        if (String(row[colIndex]).toLowerCase() === centro.toLowerCase()) {
+          filteredRows.push(row);
+        }
+      }
+      currentFilteredRows = filteredRows;
+      exibirTabela(filteredRows, headers);
+      document.getElementById('output').innerText += `\nFiltro aplicado: CENTRO_CUSTO igual a "${centro}". Registros encontrados: ${filteredRows.length}.`;
+      updateAnalysisSummary(filteredRows, headers, "CENTRO_CUSTO", "categorical");
+    }
+
+    /***********************************************************************
+     * Função para Análise de Benford na coluna SALARIO
+     ***********************************************************************/
+    function aplicarBenford(colName) {
+      if (!sheetData || sheetData.length === 0) {
+        document.getElementById('output').innerText += "\nNenhuma planilha carregada ou sem dados para aplicar Benford.";
+        return;
+      }
+      let headers = sheetData[0];
+      let colIndex = headers.map(h => String(h).toLowerCase()).indexOf(colName.toLowerCase());
+      if (colIndex === -1) {
+        document.getElementById('output').innerText += `\nColuna "${colName}" não encontrada na planilha.`;
+        return;
+      }
+      // Utiliza os dados filtrados se existirem, senão todos os dados
+      let dataToAnalyze = (currentFilteredRows && currentFilteredRows.length > 0) ? currentFilteredRows : sheetData.slice(1);
+      let digitCounts = {1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0};
+      let totalCount = 0;
+      dataToAnalyze.forEach(row => {
+        let num = parseNumber(row[colIndex]);
+        if (!isNaN(num) && num > 0) {
+          let firstDigit = getFirstDigit(num);
+          if (firstDigit >= 1 && firstDigit <= 9) {
+            digitCounts[firstDigit]++;
+            totalCount++;
+          }
+        }
+      });
+      
+      if (totalCount === 0) {
+        alert("Nenhum registro numérico válido foi encontrado na coluna " + colName + " para a análise de Benford.");
+        return;
+      }
+      
+      let distribution = [];
+      for (let d = 1; d <= 9; d++) {
+        let freq = (digitCounts[d] / totalCount) * 100;
+        distribution.push(freq);
+      }
+      document.getElementById('output').innerText += `\nLei de Benford aplicada à coluna "${colName}" com ${totalCount} registros.`;
+      plotBenfordChart(distribution, totalCount);
+      document.getElementById('summaryText').innerText = `Análise Benford realizada na coluna ${colName}. Total de registros analisados: ${totalCount}.`;
+      listarInconsistencias(dataToAnalyze, headers, colIndex, totalCount);
+    }
+
+    // Extrair primeiro dígito
+    function getFirstDigit(num) {
+      let str = Math.abs(num).toString().replace(/^0+/, '');
+      return parseInt(str.charAt(0), 10);
+    }
+
+    /***********************************************************************
+     * Exibir Tabelas de Resultados e Casos (com ordenação básica)
+     ***********************************************************************/
+    function exibirTabela(rows, headers) {
+      // Função para criar cabeçalho clicável para ordenação simples
+      function createSortableHeader(th, colIdx, tableBody) {
+        th.addEventListener('click', () => {
+          let sortedRows = rows.sort((a, b) => {
+            if(a[colIdx] < b[colIdx]) return -1;
+            if(a[colIdx] > b[colIdx]) return 1;
+            return 0;
+          });
+          atualizarTabela(sortedRows, headers, tableBody);
+        });
+      }
+
+      function atualizarTabela(rowsData, headers, tableElement) {
+        tableElement.innerHTML = "";
+        let thead = document.createElement('thead');
+        let headerRow = document.createElement('tr');
+        headers.forEach((headerText, idx) => {
+          let th = document.createElement('th');
+          th.textContent = headerText;
+          createSortableHeader(th, idx, tableElement);
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        tableElement.appendChild(thead);
+        let tbody = document.createElement('tbody');
+        rowsData.forEach(row => {
+          let tr = document.createElement('tr');
+          row.forEach(cell => {
+            let td = document.createElement('td');
+            td.textContent = cell;
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        tableElement.appendChild(tbody);
+      }
+
+      let table1 = document.getElementById('resultsTable');
+      atualizarTabela(rows, headers, table1);
+
+      let table2 = document.getElementById('casesTable');
+      atualizarTabela(rows, headers, table2);
+    }
+
+    /***********************************************************************
+     * Atualiza Resumo da Análise e Gera Gráfico de Análise
+     ***********************************************************************/
+    function updateAnalysisSummary(filteredRows, headers, colName, type) {
+      let summaryText = "";
+      if(type === "numeric") {
+        let colIndex = headers.map(h => String(h).toLowerCase()).indexOf(colName.toLowerCase());
+        let values = filteredRows.map(row => parseNumber(row[colIndex]) || 0);
+        if(values.length > 0) {
+          let count = values.length;
+          let sum = values.reduce((a, b) => a + b, 0);
+          let avg = sum / count;
+          let min = Math.min(...values);
+          let max = Math.max(...values);
+          summaryText = `Registros filtrados: ${count}\nSoma: ${formatNumber(sum)}\nMédia: ${formatNumber(avg)}\nMínimo: ${formatNumber(min)}\nMáximo: ${formatNumber(max)}`;
+          plotAnalysisChart(values, colName, count);
+        } else {
+          summaryText = "Nenhum registro encontrado para análise numérica.";
+          if(analysisChartInstance) { analysisChartInstance.destroy(); }
+        }
+      } else if(type === "categorical") {
+        summaryText = `Registros filtrados para o Centro de Custo "${colName}": ${filteredRows.length}`;
+        if(analysisChartInstance) { analysisChartInstance.destroy(); }
+      }
+      document.getElementById('summaryText').innerText = summaryText;
+    }
+
+    /***********************************************************************
+     * Gráfico da Lei de Benford
+     ***********************************************************************/
+    function plotBenfordChart(distribution, totalCount) {
+      const benfordExpected = [30.1, 17.6, 12.5, 9.7, 7.9, 6.7, 5.8, 5.1, 4.6];
+      const labels = ['1','2','3','4','5','6','7','8','9'];
+      const deviation = distribution.map((value, index) => value - benfordExpected[index]);
+
+      if (benfordChartInstance) { benfordChartInstance.destroy(); }
+      if (benfordDeviationChartInstance) { benfordDeviationChartInstance.destroy(); }
+
+      const ctx = document.getElementById('benfordChart').getContext('2d');
+      benfordChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Distribuição Real (%)',
+              data: distribution,
+              backgroundColor: 'rgba(52, 152, 219, 0.7)'
+            },
+            {
+              label: 'Distribuição Esperada (Benford) (%)',
+              data: benfordExpected,
+              backgroundColor: 'rgba(46, 204, 113, 0.7)'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: `Distribuição Real (%) - Registros Filtrados: ${totalCount}`
+            },
+            tooltip: {
+              callbacks: {
+                afterBody: () => "\nMetodologia: p(d)=log10(1+1/d)"
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 35
+            }
+          }
+        }
+      });
+
+      const ctx2 = document.getElementById('benfordDeviationChart').getContext('2d');
+      benfordDeviationChartInstance = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Desvio da Distribuição Esperada (%)',
+              data: deviation,
+              backgroundColor: deviation.map(value => value >= 0 ? 'rgba(231, 76, 60, 0.7)' : 'rgba(46, 204, 113, 0.7)')
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: `Desvio da Distribuição de Benford`
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: false,
+              title: {
+                display: true,
+                text: 'Desvio (%)'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /***********************************************************************
+     * Gráfico de Análise Filtrada (Barras)
+     ***********************************************************************/
+    function plotAnalysisChart(values, colName, filteredCount) {
+      if (analysisChartInstance) { analysisChartInstance.destroy(); }
+      const ctx = document.getElementById('analysisChart').getContext('2d');
+      const labels = values.map((v, i) => `R${i+1}`);
+      analysisChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: `${colName} (Valores Filtrados)`,
+              data: values,
+              backgroundColor: 'rgba(231, 76, 60, 0.7)'
+            },
+            {
+              label: 'Quantidade Filtrada',
+              data: values.map(() => filteredCount),
+              type: 'line',
+              yAxisID: 'y1',
+              borderColor: 'rgba(52, 152, 219, 1)',
+              backgroundColor: 'rgba(52, 152, 219, 0.2)',
+              fill: false,
+              tension: 0.1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: colName }
+            },
+            y1: {
+              beginAtZero: true,
+              position: 'right',
+              title: { display: true, text: 'Quantidade Filtrada' },
+              grid: { drawOnChartArea: false }
+            }
+          }
+        }
+      });
+    }
+
+    /***********************************************************************
+     * Função para listar divergências e atualizar Indicadores de RH
+     * OBS: Utiliza os dados filtrados (currentFilteredRows) se houver.
+     ***********************************************************************/
+    function analisarDivergencias() {
+      if (!sheetData || sheetData.length === 0) {
+        document.getElementById('output').innerText += "\nNenhuma planilha carregada ou sem dados.";
+        return;
+      }
+      showLoader();
+      const tolerancia = parseNumber(document.getElementById('toleranceSlider').value);
+      let headers = sheetData[0].map(h => String(h).toLowerCase());
+      let colSalario = headers.indexOf("salario");
+      let colDescontos = headers.indexOf("descontos");
+      let colLiquido = headers.indexOf("liquido");
+
+      if (colSalario === -1 || colDescontos === -1 || colLiquido === -1) {
+        document.getElementById('output').innerText += "\nNão foram encontradas as colunas necessárias (SALARIO, DESCONTOS, LIQUIDO).";
+        hideLoader();
+        return;
+      }
+
+      // Usa os dados filtrados se existirem; senão, utiliza todos os registros (exceto o cabeçalho)
+      let dataToAnalyze = (currentFilteredRows && currentFilteredRows.length > 0) ? currentFilteredRows : sheetData.slice(1);
+      let divergencias = [];
+      let somaDiferenca = 0;
+      let casosComErro = 0;
+      
+      for (let i = 0; i < dataToAnalyze.length; i++) {
+        let row = dataToAnalyze[i];
+        let salario = parseNumber(row[colSalario]) || 0;
+        let descontos = parseNumber(row[colDescontos]) || 0;
+        let liquido = parseNumber(row[colLiquido]) || 0;
+        let liquidoEstimado = salario - descontos;
+        let diferenca = Math.abs(liquidoEstimado - liquido);
+        let acimaTolerancia = (diferenca > tolerancia) ? "Sim" : "Não";
+        if(acimaTolerancia === "Sim") {
+          casosComErro++;
+          somaDiferenca += diferenca;
+        }
+        let colNome = headers.indexOf("nome");
+        let nome = (colNome !== -1) ? row[colNome] : "N/D";
+        divergencias.push({
+          linha: i + 2,
+          nome: nome,
+          salario: formatNumber(salario),
+          descontos: formatNumber(descontos),
+          liquidoReal: formatNumber(liquido),
+          liquidoEstimado: formatNumber(liquidoEstimado),
+          diferenca: formatNumber(diferenca),
+          "Acima da Tolerância": acimaTolerancia
+        });
+      }
+
+      divergencias.sort((a, b) => {
+        if (a["Acima da Tolerância"] === b["Acima da Tolerância"]) {
+          return parseFloat(a.diferenca.replace(/\./g, '').replace(',', '.')) < parseFloat(b.diferenca.replace(/\./g, '').replace(',', '.')) ? 1 : -1;
+        }
+        return (a["Acima da Tolerância"] === "Sim") ? -1 : 1;
+      });
+
+      exibirTabelaDivergencias(divergencias);
+      document.getElementById('output').innerText += `\nAnálise de divergências concluída com tolerância de R$ ${formatNumber(tolerancia)}. Total de casos analisados: ${divergencias.length}.`;
+      
+      // Atualizar Indicadores de RH
+      const taxaErro = (casosComErro / dataToAnalyze.length) * 100;
+      const diffMedia = casosComErro > 0 ? somaDiferenca / casosComErro : 0;
+      document.getElementById('errorRate').innerText = "Taxa de Erro na Folha: " + formatNumber(taxaErro) + "%";
+      document.getElementById('avgDifference').innerText = "Diferença Média entre Valor Estimado e Real: R$ " + formatNumber(diffMedia);
+      hideLoader();
+    }
+
+    /***********************************************************************
+     * Exibir Tabela de Divergências com seleção (linha clicável muda cor)
+     * e inclusão da coluna de alerta (ícone "⚠️" se "Acima da Tolerância" for "Sim")
+     ***********************************************************************/
+    function exibirTabelaDivergencias(divergencias) {
+      let table = document.getElementById('divergenciaTable');
+      table.innerHTML = "";
+      let thead = document.createElement('thead');
+      let headerRow = document.createElement('tr');
+      // Cabeçalho com nova coluna "Alerta"
+      ["Linha", "Nome", "Salário (R$)", "Descontos (R$)", "Líquido Real (R$)", "Líquido Estimado (R$)", "Diferença (R$)", "Acima da Tolerância", "Alerta"].forEach(txt => {
+        let th = document.createElement('th');
+        th.textContent = txt;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      let tbody = document.createElement('tbody');
+      divergencias.forEach(item => {
+        let tr = document.createElement('tr');
+        // Evento para alterar a cor da linha ao clicar (toggle da classe "selected")
+        tr.addEventListener('click', () => {
+          tr.classList.toggle('selected');
+        });
+        // Cria as células com os valores do item
+        Object.values(item).forEach(valor => {
+          let td = document.createElement('td');
+          td.textContent = valor;
+          tr.appendChild(td);
+        });
+        // Nova célula para o alerta: exibe "⚠️" se "Acima da Tolerância" for "Sim"
+        let alertaTd = document.createElement('td');
+        alertaTd.textContent = (item["Acima da Tolerância"] === "Sim") ? "⚠️" : "";
+        tr.appendChild(alertaTd);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+    }
+
+    /***********************************************************************
+     * Função para aplicar Regressão Linear e Exponencial com Gráfico Scatter
+     * Agora utilizando os dados filtrados (se houver)
+     ***********************************************************************/
+    function aplicarRegressao() {
+      if (!sheetData || sheetData.length === 0) {
+        document.getElementById('regressionOutput').innerText = "Nenhuma planilha carregada ou sem dados.";
+        return;
+      }
+      showLoader();
+      // Usa os dados filtrados, se existir, senão utiliza todos os registros (exceto cabeçalho)
+      let data = (currentFilteredRows && currentFilteredRows.length > 0) ? currentFilteredRows : sheetData.slice(1);
+      let headers = sheetData[0].map(h => String(h).toLowerCase());
+      let colSalario = headers.indexOf("salario");
+      let colDescontos = headers.indexOf("descontos");
+      let colLiquido = headers.indexOf("liquido");
+
+      if (colSalario === -1 || colDescontos === -1 || colLiquido === -1) {
+        document.getElementById('regressionOutput').innerText = "Colunas SALARIO, DESCONTOS ou LIQUIDO não encontradas.";
+        hideLoader();
+        return;
+      }
+
+      // Cria arrays X e Y utilizando os dados filtrados (ou todos os dados)
+      let X = [], Y = [];
+      data.forEach(row => {
+        let salario = parseNumber(row[colSalario]) || 0;
+        let descontos = parseNumber(row[colDescontos]) || 0;
+        let liquido = parseNumber(row[colLiquido]) || 0;
+        let diferencial = salario - descontos;
+        if (!isNaN(diferencial) && !isNaN(liquido)) {
+          X.push(diferencial);
+          Y.push(liquido);
+        }
+      });
+
+      if (X.length === 0) {
+        document.getElementById('regressionOutput').innerText = "Não há dados válidos para regressão.";
+        hideLoader();
+        return;
+      }
+
+      // Regressão Linear
+      let n = X.length;
+      let sumX = X.reduce((a, b) => a + b, 0);
+      let sumY = Y.reduce((a, b) => a + b, 0);
+      let meanX = sumX / n;
+      let meanY = sumY / n;
+      let numerator = 0, denominator = 0;
+      for (let i = 0; i < n; i++) {
+        numerator += (X[i] - meanX) * (Y[i] - meanY);
+        denominator += Math.pow(X[i] - meanX, 2);
+      }
+      let beta = numerator / denominator;
+      let alpha = meanY - beta * meanX;
+
+      // Regressão Exponencial (linearizado com log)
+      let X_exp = [], logY = [];
+      for (let i = 0; i < n; i++) {
+        if (Y[i] > 0) {
+          X_exp.push(X[i]);
+          logY.push(Math.log(Y[i]));
+        }
+      }
+      let n_exp = X_exp.length;
+      let sumX_exp = X_exp.reduce((a, b) => a + b, 0);
+      let sumLogY = logY.reduce((a, b) => a + b, 0);
+      let meanX_exp = sumX_exp / n_exp;
+      let meanLogY = sumLogY / n_exp;
+      let numerator_exp = 0, denominator_exp = 0;
+      for (let i = 0; i < n_exp; i++) {
+        numerator_exp += (X_exp[i] - meanX_exp) * (logY[i] - meanLogY);
+        denominator_exp += Math.pow(X_exp[i] - meanX_exp, 2);
+      }
+      let gamma1 = numerator_exp / denominator_exp;
+      let gamma0 = meanLogY - gamma1 * meanX_exp;
+      
+      let previsoesLinear = X.map(x => alpha + beta * x);
+      let previsoesExp = X_exp.map(x => Math.exp(gamma0 + gamma1 * x));
+      
+      let output = "<strong>Regressão Linear</strong><br>";
+      output += "Modelo: LIQUIDO = α + β × (SALÁRIO - DESCONTOS)<br>";
+      output += "α (intercepto): " + formatNumber(alpha) + "<br>";
+      output += "β (coeficiente): " + formatNumber(beta) + "<br><br>";
+
+      output += "<strong>Regressão Exponencial</strong><br>";
+      output += "Modelo (linearizado): ln(LIQUIDO) = γ₀ + γ₁ × (SALÁRIO - DESCONTOS)<br>";
+      output += "γ₀: " + formatNumber(gamma0) + "<br>";
+      output += "γ₁: " + formatNumber(gamma1) + "<br><br>";
+
+      output += "O modelo exponencial pressupõe efeitos multiplicativos, enquanto o linear pressupõe uma relação direta.<br>";
+      output += "A análise dos resíduos e a comparação entre os valores observados e previstos ajudam a identificar inconsistências.<br>";
+      document.getElementById('regressionOutput').innerHTML = output;
+
+      // Gráfico Scatter para Regressão Linear
+      if(regressionScatterChartInstance) { regressionScatterChartInstance.destroy(); }
+      const scatterCtx = document.getElementById('regressionScatterChart').getContext('2d');
+      regressionScatterChartInstance = new Chart(scatterCtx, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Dados Observados',
+            data: X.map((x, i) => ({ x: x, y: Y[i] })),
+            backgroundColor: 'rgba(52, 152, 219, 0.7)'
+          },
+          {
+            label: 'Linha de Regressão',
+            data: X.map((x) => ({ x: x, y: alpha + beta * x })),
+            type: 'line',
+            borderColor: 'rgba(231, 76, 60, 1)',
+            borderWidth: 2,
+            fill: false,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          scales: {
+            x: { title: { display: true, text: "SALÁRIO - DESCONTOS" } },
+            y: { title: { display: true, text: "LIQUIDO" } }
+          }
+        }
+      });
+      hideLoader();
+    }
+
+    /***********************************************************************
+     * Função para exportar dados e gráficos para PDF
+     ***********************************************************************/
+    document.getElementById('exportPDFBtn').addEventListener('click', () => {
+      showLoader();
+      // Seleciona a área que deseja exportar (ajuste conforme necessário)
+      html2canvas(document.body).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save('relatorio.pdf');
+        hideLoader();
+      });
+    });
+  </script>
+</body>
+</html>
